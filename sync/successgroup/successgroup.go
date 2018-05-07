@@ -17,39 +17,35 @@ import (
 
 // A Group is a collection of goroutines working on subtasks that are part of
 // the same overall task.
-//
-// A zero Group is valid but it does not cancel on success.
-type Group struct {
+type Group interface {
+	Go(func() error)
+	Wait() error
+}
+
+type group struct {
 	ctxCancel func()
 
 	wg sync.WaitGroup
 	c  chan error
+}
 
-	initChannelOnce sync.Once
+func New() Group {
+	return &group{c: make(chan error)}
 }
 
 // WithContext returns a new Group and an associated Context derived from ctx.
 //
 // The derived Context is cancelled the first time a function passed to Go
 // returns a nil error or when all of them return, whichever occurs first.
-func WithContext(ctx context.Context) (*Group, context.Context) {
+func WithContext(ctx context.Context) (Group, context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 
-	return &Group{ctxCancel: cancel}, ctx
-}
-
-// safeInitChannel makes it possible to have a valid zero Group
-func (g *Group) safeInitChannel() {
-	g.initChannelOnce.Do(func() {
-		g.c = make(chan error)
-	})
+	return &group{ctxCancel: cancel, c: make(chan error)}, ctx
 }
 
 // Wait blocks until the first function calls from the Go method has returned
 // with a `nil` error.
-func (g *Group) Wait() error {
-	g.safeInitChannel()
-
+func (g *group) Wait() error {
 	go func() {
 		g.wg.Wait()
 		close(g.c)
@@ -85,8 +81,7 @@ func (g *Group) Wait() error {
 }
 
 // Go calls the given function in a new goroutine.
-func (g *Group) Go(f func() error) {
-	g.safeInitChannel()
+func (g *group) Go(f func() error) {
 	g.wg.Add(1)
 
 	go func() {

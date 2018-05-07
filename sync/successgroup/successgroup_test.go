@@ -13,7 +13,7 @@ import (
 
 func BenchmarkSuccessGroupBestCaseScenario(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		group := successgroup.Group{}
+		group := successgroup.New()
 		group.Go(func() error {
 			return nil
 		})
@@ -26,12 +26,12 @@ func BenchmarkSuccessGroupBestCaseScenario(b *testing.B) {
 
 func TestSuccessGroup(t *testing.T) {
 	Convey("A successgroup", t, func() {
-		group := successgroup.Group{}
+		group := successgroup.New()
 
-		Convey("should work with a zero-value initialization", func() {
+		Convey("should return after it has run the Go function", func() {
 			var success bool
 			group.Go(func() error {
-				<-time.After(10 * time.Millisecond) // simulate some expensive operation
+				<-time.After(10 * time.Millisecond) // simulate an expensive operation
 				success = true
 				return nil
 			})
