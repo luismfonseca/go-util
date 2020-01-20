@@ -16,17 +16,17 @@ This is an example of improved latency (`min(dbPrimary, dbReadReplica)`)
 and improved availability (`dbPrimaryHealthy || dbReadReplicaHealthy`).
 
 ```go
-var userCount int
 group, ctx := successgroup.WithContext(context.Background())
 
 for db := range []Database{dbPrimary, dbReadReplica} {
     group.Go(func() error {
-        userCount, dbErr := db.GetUsersCount(ctx)
-        return dbErr
+        return db.GetUsersCount(ctx)
     })
 }
-dbErr := group.Wait()
+userCountRaw, dbErr := group.Wait()
 if dbErr != nil {
-    fmt.Println("Got user count:", userCount)
+    panic(fmt.Sprintf("Database error: %s", dbErr.Error()))
 }
+userCount := userCountRaw.(int)
+fmt.Println("Got user count:", userCount)
 ```
