@@ -14,11 +14,11 @@ import (
 func BenchmarkSuccessGroupBestCaseScenario(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		group := successgroup.New()
-		group.Go(func() error {
-			return nil
+		group.Go(func() (interface{}, error) {
+			return nil, nil
 		})
-		group.Go(func() error {
-			return nil
+		group.Go(func() (interface{}, error) {
+			return nil, nil
 		})
 		group.Wait()
 	}
@@ -29,39 +29,38 @@ func TestSuccessGroup(t *testing.T) {
 		group := successgroup.New()
 
 		Convey("should return after it has run the Go function", func() {
-			var success bool
-			group.Go(func() error {
+			group.Go(func() (interface{}, error) {
 				<-time.After(10 * time.Millisecond) // simulate an expensive operation
-				success = true
-				return nil
+				return true, nil
 			})
 
-			err := group.Wait()
+			success, err := group.Wait()
 			So(err, ShouldBeNil)
-			So(success, ShouldBeTrue)
+			So(success.(bool), ShouldBeTrue)
 		})
 
 		Convey("should return the last error", func() {
 			err1, err2, err3 := errors.New("1"), errors.New("2"), errors.New("3")
 
-			group.Go(func() error {
-				return err1
+			group.Go(func() (interface{}, error) {
+				return nil, err1
 			})
-			group.Go(func() error {
+			group.Go(func() (interface{}, error) {
 				<-time.After(10 * time.Millisecond)
-				return err2
+				return nil, err2
 			})
-			group.Go(func() error {
+			group.Go(func() (interface{}, error) {
 				<-time.After(20 * time.Millisecond)
-				return err3
+				return nil, err3
 			})
 
-			err := group.Wait()
+			_, err := group.Wait()
 			So(err, ShouldEqual, err3)
 		})
 
 		Convey("should return immediately if no Go functions were called", func() {
-			err := group.Wait()
+			value, err := group.Wait()
+			So(value, ShouldBeNil)
 			So(err, ShouldBeNil)
 		})
 
@@ -71,26 +70,26 @@ func TestSuccessGroup(t *testing.T) {
 			Convey("and it should cancel it if one function was successful", func() {
 				var wasCancelled atomic.Value
 
-				group.Go(func() error {
-					return errors.New("error")
+				group.Go(func() (interface{}, error) {
+					return nil, errors.New("error")
 				})
-				group.Go(func() error {
+				group.Go(func() (interface{}, error) {
 					<-time.After(10 * time.Millisecond)
-					return nil
+					return nil, nil
 				})
-				group.Go(func() error {
+				group.Go(func() (interface{}, error) {
 					for {
 						select {
 						case <-ctx.Done():
 							wasCancelled.Store(true)
-							return nil
+							return nil, nil
 						case <-time.After(20 * time.Millisecond):
-							return nil
+							return nil, nil
 						}
 					}
 				})
 
-				err := group.Wait()
+				_, err := group.Wait()
 				So(err, ShouldBeNil)
 
 				// make sure the cancelled part is executed
@@ -102,11 +101,11 @@ func TestSuccessGroup(t *testing.T) {
 			Convey("and it should cancel even if all have finished", func() {
 				var wasCancelled atomic.Value
 
-				group.Go(func() error {
-					return errors.New("error")
+				group.Go(func() (interface{}, error) {
+					return nil, errors.New("error")
 				})
-				group.Go(func() error {
-					return errors.New("another error")
+				group.Go(func() (interface{}, error) {
+					return nil, errors.New("another error")
 				})
 				group.Wait()
 

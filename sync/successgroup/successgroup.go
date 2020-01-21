@@ -18,19 +18,24 @@ import (
 // A Group is a collection of goroutines working on subtasks that are part of
 // the same overall task.
 type Group interface {
-	Go(func() error)
-	Wait() error
+	Go(func() (interface{}, error))
+	Wait() (interface{}, error)
+}
+
+type funcResult struct {
+	value interface{}
+	err   error
 }
 
 type group struct {
 	ctxCancel func()
 
 	wg sync.WaitGroup
-	c  chan error
+	c  chan funcResult
 }
 
 func New() Group {
-	return &group{c: make(chan error)}
+	return &group{c: make(chan funcResult)}
 }
 
 // WithContext returns a new Group and an associated Context derived from ctx.
@@ -40,21 +45,21 @@ func New() Group {
 func WithContext(ctx context.Context) (Group, context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 
-	return &group{ctxCancel: cancel, c: make(chan error)}, ctx
+	return &group{ctxCancel: cancel, c: make(chan funcResult)}, ctx
 }
 
 // Wait blocks until the first function calls from the Go method has returned
 // with a `nil` error.
-func (g *group) Wait() error {
+func (g *group) Wait() (interface{}, error) {
 	go func() {
 		g.wg.Wait()
 		close(g.c)
 	}()
 
 	var lastErr error
-	for err := range g.c {
-		if err != nil {
-			lastErr = err
+	for res := range g.c {
+		if res.err != nil {
+			lastErr = res.err
 			continue
 		}
 
@@ -68,7 +73,7 @@ func (g *group) Wait() error {
 			}
 		}()
 
-		return nil
+		return res.value, nil
 	}
 
 	// At this point, all `Go` functions have returned
@@ -77,16 +82,20 @@ func (g *group) Wait() error {
 		g.ctxCancel()
 	}
 
-	return lastErr
+	return nil, lastErr
 }
 
 // Go calls the given function in a new goroutine.
-func (g *group) Go(f func() error) {
+func (g *group) Go(f func() (interface{}, error)) {
 	g.wg.Add(1)
 
 	go func() {
 		defer g.wg.Done()
 
-		g.c <- f()
+		value, err := f()
+		g.c <- funcResult{
+			value: value,
+			err:   err,
+		}
 	}()
 }
